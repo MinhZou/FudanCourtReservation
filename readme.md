@@ -50,8 +50,7 @@ FudanCourtReservation 是一个用于自动预约复旦体育场馆（如羽毛�
 
 rsa_text可以直接从order_page页面获取
 
-order_page_url = 'https://elife.fudan.edu.cn/public/front/loadOrderForm_ordinary.htm?' \
-                         'serviceContent.id={}&serviceCategory.id={}&codeStr=&resourceIds={}&orderCounts=1'.format(self.content_id, self.category_id, resource_id)
+order_page_url = 'https://elife.fudan.edu.cn/public/front/loadOrderForm_ordinary.htm?serviceContent.id={}&serviceCategory.id={}&codeStr=&resourceIds={}&orderCounts=1'.format(self.content_id, self.category_id, resource_id)
                          
 <input type="hidden" id="rsa_text_" name="rsa_text_" value="xxx">
 
