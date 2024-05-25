@@ -47,6 +47,10 @@ FudanCourtReservation 是一个用于自动预约复旦体育场馆（如羽毛�
 
 请求填充字段为排序后汉字的数字三位数横纵坐标的结合。
 
+chromedriver下载地址：
+https://chromedriver.storage.googleapis.com/index.html
+https://googlechromelabs.github.io/chrome-for-testing/#stable
+
 ## 许可证
 
 本项目采用 MIT 许可证。
