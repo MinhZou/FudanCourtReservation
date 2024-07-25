@@ -23,11 +23,13 @@ FudanCourtReservation 是一个用于自动预约复旦体育场馆（如羽毛�
     ```
 
 2. 安装依赖项：
+    主要是selenium的配置，下方有说明
 
 ## 使用方法
 
 1. 配置账号信息：
     修改 `config.json` 文件，填写你的ehall登录信息和预约选项。
+    修改 `client.py` 中接码平台的信息
 
 2. 运行脚本：(切勿直接运行，理解代码逻辑并修改之后再运行)
    
@@ -59,6 +61,11 @@ chromedriver下载地址：
 https://chromedriver.storage.googleapis.com/index.html
 
 https://googlechromelabs.github.io/chrome-for-testing/#stable
+
+2024年7月25日 更新说明：
+
+该项目更新后可以重新正常运行，已测试通过，但采用的是selenium模拟浏览器操作，高峰期bug会增多，慎用，且文字识别错误率有点高，进行了手动调整和增加了retry次数修改。
+
 
 ## 许可证
 
