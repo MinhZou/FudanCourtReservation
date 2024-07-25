@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """
+Use to book sports venues on the Fudan campus
 @author: MinhZou
-@date: 2022-04-03
+@date: 2022-04-03 update 2024-07-25
 @e-mail: 770445973@qq.com
 """
 
@@ -25,6 +26,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.alert import Alert
 from apscheduler.schedulers.blocking import BlockingScheduler
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 import multiprocessing
 import threading
 import base64
@@ -32,11 +35,13 @@ import numpy as np
 from PIL import Image
 from io import BytesIO
 import cv2
+from utils.chaojiying import Chaojiying_Client
+from selenium.webdriver.common.action_chains import ActionChains
 
-
-from utils import chaojiying, send_email, get_dis_from_captcha
+from utils import send_email, image_process
 
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s - %(name)s - %(levelname)s - %(process)s - %(thread)s] %(message)s')
+
 
 class Client(object):
     def __init__(self, configs):
@@ -46,7 +51,7 @@ class Client(object):
         self.mobile = configs['mobile']
         self.court_name = configs['court_name']
         self.email = configs['email']
-        self.driver_path = './chromedriver/chromedriver_bak.exe'
+        self.driver_path = './chromedriver/chromedriver.exe'
         # self.time_end = time_end
         self.time_end = '23:59:59'
 
@@ -61,6 +66,7 @@ class Client(object):
             '北区体育馆排球':'2c9c486e4f821a19014f827298da0047',
             '江湾体育馆网球场':'8aecc6ce7176eb18017225bfcd292809',
             '江湾室外网球场':'8aecc6ce780fe18301786c51f2a5627b',
+            '江湾体育馆排球场1号': '8aecc6ce878581d701879c7548c6737d',
             '江湾体育馆排球场': '8aecc6ce7176eb18017225c2e7d62831'
             }
         self.content_id = self.courts_dic[self.court_name]
@@ -75,9 +81,10 @@ class Client(object):
         # self.logger = log.get_logger('logs', name='client') logging not support multiprocess
 
         # Use to recognize the Verification Code (http://www.chaojiying.com/).
-        self.cjy_usrname = '###' # 账户
-        self.cjy_password = '###' # 密码
-        self.cjy_soft_id = '###' # 接口id
+        self.cjy_usrname = '###'
+        self.cjy_password = '###'
+        self.cjy_soft_id = '###'
+        self.Chaojiying_Client = Chaojiying_Client(self.cjy_usrname, self.cjy_password, self.cjy_soft_id)
 
         # Preseted time order
         # self.stage_1 = ['20:00', '19:00', '18:00']
@@ -154,72 +161,58 @@ class Client(object):
             self.cookie = self.get_cookie_by_selenium()
         return
 
-    def get_captcha_img(self, resource_id):
-        timestamp_ms = int(time.time() * 1000)
-        # print(timestamp_ms)
-        img_code_url = 'https://elife.fudan.edu.cn/public/front/getImgSwipe.htm?_={}'.format(timestamp_ms)
-        img_code_headers = {
-            'cookie': self.cookie,
-            'user-agent': self.user_agent,
-            'Connection': 'close'
-        }
-        img_code_resp = requests.get(img_code_url, headers=img_code_headers)
-        src_image = ''
-        if img_code_resp.status_code == 200:
-            data = img_code_resp.json()
-            SrcImage = "data:image/jpg;base64," + data['object']['SrcImage']
-            src_image = data['object']['SrcImage']
-            CutImage = "data:image/jpg;base64," + data['object']['CutImage']
-            YPosition = data['object']['YPosition']
-            SrcImageWidth = data['object']['SrcImageWidth']
-            SrcImageHeight = data['object']['SrcImageHeight']
-            # call imgVer() function with extracted properties here
+    def get_captcha_image_and_valid_text(self, browser):
+        try:
+            img_selector = "img.valid_bg-img"
+            valid_text_selector = "span.valid_tips__text"
+            wait = WebDriverWait(browser, 5)  # 等待最多5秒
+            img_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, img_selector)))
+            valid_tips_text = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, valid_text_selector)))
+            valid_text = valid_tips_text.text.split("请依次点击：")[-1]
+            print(f"Successfully retrieved valid text: {valid_text}")
+            base64_str = img_element.get_attribute('src')
+            if base64_str:
+                captcha_image = image_process.base64_to_image(base64_str)
+            else:
+                captcha_image = None
+        except Exception as e:
+            print(f"An error occurred: {e}")
+            valid_text = None
+            captcha_image = None
+        return captcha_image, valid_text
+
+    def get_captcha_results(self, captcha_image):
+        if captcha_image:
+            res_dic = self.Chaojiying_Client.post_pic(captcha_image, 9501)
+            captcha_dic = self.Chaojiying_Client.extract_coordinates(res_dic)
         else:
-            print("Request failed with status code: ", img_code_resp.status_code)
-        # print(img_code_resp.json())
-        img_code_resp.close()
-        # print(src_image)
-        return src_image
+            captcha_dic = None
+        return captcha_dic
 
-    def get_src_cut_img(self, resource_id):
-        timestamp_ms = int(time.time() * 1000)
-        # print(timestamp_ms)
-        img_code_url = 'https://elife.fudan.edu.cn/public/front/getImgSwipe.htm?_={}'.format(timestamp_ms)
-        img_code_headers = {
-            'cookie': self.cookie,
-            'user-agent': self.user_agent,
-            'Connection': 'close'
-        }
-        img_code_resp = requests.get(img_code_url, headers=img_code_headers)
-        src_image = ''
-        cut_img = ''
-        if img_code_resp.status_code == 200:
-            data = img_code_resp.json()
-            SrcImage = "data:image/jpg;base64," + data['object']['SrcImage']
-            src_image = data['object']['SrcImage']
-            CutImage = "data:image/jpg;base64," + data['object']['CutImage']
-            cut_img = data['object']['CutImage']
-            YPosition = data['object']['YPosition']
-            SrcImageWidth = data['object']['SrcImageWidth']
-            SrcImageHeight = data['object']['SrcImageHeight']
-            # call imgVer() function with extracted properties here
-        else:
-            print("Request failed with status code: ", img_code_resp.status_code)
-        img_code_resp.close()
-        return src_image, cut_img
+    def click_captcha(self, browser, valid_text, captcha_dic):
+        captcha_element = browser.find_element(By.CLASS_NAME, 'valid_bg-img')
 
+        def replace_similar_chars(s, d):
+            for char in s:
+                matches = sum(1 for k in d if k == char)
+                if matches >= 3:
+                    for k in list(d.keys()):
+                        if k == char:
+                            d[char] = d.pop(k)
+            return d
 
-    def get_captcha_results(self, base64_data):
-        byte_data = base64.b64decode(base64_data)
-        dis, wbili = get_dis_from_captcha.get_dis_cv(byte_data)
-        return dis, wbili
+        # 文字识别不准确，手动调整，减少retry次数
+        if len(valid_text) == len(captcha_dic) == 4:
+            replace_similar_chars(valid_text, captcha_dic)
 
-    def get_src_cut_results(self, bg_base64_data, bl_base64_data):
-        bg_byte_data = base64.b64decode(bg_base64_data)
-        bl_byte_data = base64.b64decode(bl_base64_data)
-        dis, wbili = get_dis_from_captcha.get_dis_bg_bl(bg_byte_data, bl_byte_data)
-        return dis, wbili
-
+        if valid_text and captcha_dic:
+            for _, valid_word in enumerate(valid_text):
+                left = captcha_dic.get(valid_word, {}).get('left', 50)  # - 10
+                top = captcha_dic.get(valid_word, {}).get('top', 50)  # - 20
+                actions = ActionChains(browser)
+                actions.move_to_element_with_offset(captcha_element, left, top).click().perform()
+                time.sleep(0.5)
+        return
 
     def get_order_page_by_selenium(self, resource_id):
         chrome_options = Options()
@@ -227,7 +220,7 @@ class Client(object):
         chrome_options.binary_location = "C:/Program Files/Google/Chrome/Application/chrome.exe"
         s = Service(r'{}'.format(self.driver_path))
         # browser = webdriver.Chrome(service=s)
-        browser = webdriver.Chrome(service=s,options=chrome_options)
+        browser = webdriver.Chrome(service=s, options=chrome_options)
         order_page_url = 'https://elife.fudan.edu.cn/public/front/loadOrderForm_ordinary.htm?' \
                          'serviceContent.id={}&serviceCategory.id={}&codeStr=&resourceIds={}&orderCounts=1'.format(self.content_id, self.category_id, resource_id)
         browser.get(order_page_url)
@@ -235,52 +228,61 @@ class Client(object):
             c_dic = {"name": key, "value": val}
             browser.add_cookie(c_dic)
         browser.get(order_page_url)
-        browser.refresh()
-        verify_button = browser.find_element_by_css_selector('#verify_button')
-        verify_button.click()
-        time.sleep(0.1)
+        # browser.refresh()
+        time.sleep(5)
 
-        base64_str = browser.find_element_by_css_selector('#scream').get_attribute('src')
+        try:
+            verify_button = browser.find_element_by_css_selector('#verify_button1')
+            verify_button.click() #
+            time.sleep(1)
+        except Exception as e:
+            logging.info('Faild to click verify_button', exc_info=True)
+            browser.quit()
+            return
+
+        captcha_image, valid_text = self.get_captcha_image_and_valid_text(browser)
+        captcha_dic = self.get_captcha_results(captcha_image)
+        print(f"Successfully retrieved captcha results: {captcha_dic}")
+        # # Test
+        # valid_text = "农务民息"
+        # captcha_dic = {'务': {'left': 285, 'top': 129}, '息': {'left': 197, 'top': 127},
+        #                '民': {'left': 121, 'top': 102}, '农': {'left': 56, 'top': 81}}
+        self.click_captcha(browser, valid_text, captcha_dic)
+
+        max_tries = 3
+        time.sleep(1)
+        for i in range(max_tries):
+            value = None
+            try:
+                input_element = browser.find_element(By.ID, 'validateCode')
+                value = input_element.get_attribute('value')
+            except Exception as e:
+                print("Error:", e)
+            if value:
+                print("Verification passed!")
+                break
+            else:
+                print("Verification failed!")
+                print("Retrying...")
+                time.sleep(3)
+                captcha_image, valid_text = self.get_captcha_image_and_valid_text(browser)
+                captcha_dic = self.get_captcha_results(captcha_image)
+                print(f"Successfully retrieved captcha results: {captcha_dic}")
+                # # Test
+                # valid_text = "农务民息"
+                # captcha_dic = {'务': {'left': 285, 'top': 129}, '息': {'left': 197, 'top': 127},
+                #                '民': {'left': 121, 'top': 102}, '农': {'left': 56, 'top': 81}}
+                self.click_captcha(browser, valid_text, captcha_dic)
+                time.sleep(1)
+
+        try:
+            element = browser.find_element_by_id('btn_sub')
+            browser.execute_script("arguments[0].click();", element)
+        except Exception as e:
+            print("=======")
+            raise
         browser.quit()
-
-        # print(base64_str) # data:image/jpg;base64,
-        base64_data = re.sub('^data:image/.+;base64,', '', base64_str)
-        # print(base64_data)
-        byte_data = base64.b64decode(base64_data)
-        dis, wbili = get_dis_from_captcha.get_dis_cv(byte_data)
-        print(dis, wbili)
-        return dis, wbili
-
-
-    def post_order(self, resource_id, moveEnd_X, wbili):
-        post_url = 'https://elife.fudan.edu.cn/public/front/saveOrder.htm?op=order'
-        post_headers = {
-            'cookie': self.cookie,
-            'referer': 'https://elife.fudan.edu.cn/public/front/loadOrderForm_ordinary.htm?serviceContent.id='
-                       '{}&serviceCategory.id={}&codeStr=&resourceIds={}&orderCounts=1'.format(self.content_id, self.category_id, resource_id),
-            'user-agent': self.user_agent,
-            'Connection': 'close'
-        }
-        data_form = {
-            'moveEnd_X': moveEnd_X,
-            'wbili': wbili,
-            'serviceContent.id': self.content_id,
-            'serviceCategory.id': self.category_id,
-            'contentChild': '',
-            'codeStr':'',
-            'itemsPrice': '',
-            'acceptPrice': '',
-            'orderuser': self.orderuser,
-            'resourceIds': resource_id,
-            'orderCounts': '1',
-            'lastDays': '0',
-            'mobile': self.mobile,
-            'd_cgyy.bz': ''
-        }
-        post_resp = requests.post(url=post_url, data=data_form, headers=post_headers)
-        post_resp.close()
-        return post_resp
-
+        return
 
     def get_status(self):
         status_url = 'https://elife.fudan.edu.cn/public/userbox/index.htm?userConfirm=&orderstateselect='
@@ -337,18 +339,19 @@ class Client(object):
     def book_court(self, order_time, time_str):
         resource_id = self.resource_dic[order_time]
         logging.info('正在预定{}-{} {}'.format(self.court_name, self.search_date, order_time))
-        src_img, cut_img = self.get_src_cut_img(resource_id)
-        dis, wbili = self.get_src_cut_results(src_img, cut_img)
-        dis, wbili = self.get_captcha_results(src_img)
-
+        self.get_order_page_by_selenium(resource_id)
 
         count = 1
         while True:
             self.get_status()
+            # if len(updated_status) > self.status_dic:
+            #     self.status_dic = updated_status
+            # status_dic = self.get_status()
             key = self.search_date[-5:] + '-' + order_time
             logging.info(self.status_dic)
             logging.info(key)
             if key in self.status_dic:
+                # logging.info('长度为{}：{}'.format(len(resp_txt), resp_txt))
                 self.reserved_dic[order_time] = 1
                 now_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 flag = send_email.send_mail(now_time, time_str, self.court_name, self.username, self.email)
@@ -361,10 +364,7 @@ class Client(object):
                 time.sleep(1)
                 # logging.info('长度为{}：{}'.format(len(resp_txt), resp_txt))
                 logging.info('第{}次重新预定{}-{} {}'.format(count, self.court_name, self.search_date, order_time))
-                # dis, wbili = self.get_order_page_by_selenium(resource_id)
-                src_img, cut_img = self.get_src_cut_img(resource_id)
-                dis, wbili = self.get_src_cut_results(src_img, cut_img)
-                dis, wbili = self.get_captcha_results(src_img)
+                self.get_order_page_by_selenium(resource_id)
                 count += 1
                 if count >= 3:
                     break
@@ -401,6 +401,10 @@ class Client(object):
 
         while True:
             self.get_status()
+            # updated_status = self.get_status(self.cookie)
+            # if len(updated_status) > self.status_dic:
+            #     self.status_dic = updated_status
+            # key = search_date[-5:] + '-' + order_time
             self.count_var.value = len(self.status_dic)
             if self.count_var.value >= 2:
                 break
