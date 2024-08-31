@@ -40,6 +40,30 @@ from selenium.webdriver.common.action_chains import ActionChains
 
 from utils import send_email, image_process
 
+# python 3.10及以上需要补充以下代码, 并且修改requests部分, 代码中已注释
+# *****
+import urllib3
+import ssl
+class CustomHttpAdapter (requests.adapters.HTTPAdapter):
+    # "Transport adapter" that allows us to use custom ssl_context.
+    def __init__(self, ssl_context=None, **kwargs):
+        self.ssl_context = ssl_context
+        super().__init__(**kwargs)
+
+    def init_poolmanager(self, connections, maxsize, block=False):
+        self.poolmanager = urllib3.poolmanager.PoolManager(
+            num_pools=connections, maxsize=maxsize,
+            block=block, ssl_context=self.ssl_context)
+
+
+def get_legacy_session():
+    ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+    ctx.options |= 0x4  # OP_LEGACY_SERVER_CONNECT
+    session = requests.session()
+    session.mount('https://', CustomHttpAdapter(ctx))
+    return session
+# *****
+
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s - %(name)s - %(levelname)s - %(process)s - %(thread)s] %(message)s')
 
 
@@ -161,6 +185,10 @@ class Client(object):
         }
         try:
             logging.info('获取ID中...')
+            # python 3.10及以上使用
+            # s = get_legacy_session()
+            # resource_resp = s.get(resource_url, headers=headers)
+            # python 3.10 以下使用
             resource_resp = requests.get(resource_url, headers=headers)
             html_resource = resource_resp.text
             # print(html_resource)
@@ -312,7 +340,10 @@ class Client(object):
             'user-agent': self.user_agent,
             'Connection': 'close',
         }
-
+        # python 3.10及以上使用
+        # s = get_legacy_session()
+        # resource_resp = s.get(status_url, headers=headers)
+        # python 3.10 以下使用
         resource_resp = requests.get(status_url, headers=headers)
         html_resource = resource_resp.text
         soup = BeautifulSoup(html_resource,'html.parser')
