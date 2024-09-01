@@ -2,9 +2,10 @@
 """
 Use to book sports venues on the Fudan campus
 @author: MinhZou
-@date: 2022-04-03 update 2024-07-25
+@date: 2022-04-03 update 2024-09-01
 @e-mail: 770445973@qq.com
 """
+
 
 import os
 import io
@@ -40,32 +41,33 @@ from selenium.webdriver.common.action_chains import ActionChains
 
 from utils import send_email, image_process
 
-# python 3.10及以上需要补充以下代码, 并且修改requests部分, 代码中已注释
-# *****
-import urllib3
-import ssl
-class CustomHttpAdapter (requests.adapters.HTTPAdapter):
-    # "Transport adapter" that allows us to use custom ssl_context.
-    def __init__(self, ssl_context=None, **kwargs):
-        self.ssl_context = ssl_context
-        super().__init__(**kwargs)
-
-    def init_poolmanager(self, connections, maxsize, block=False):
-        self.poolmanager = urllib3.poolmanager.PoolManager(
-            num_pools=connections, maxsize=maxsize,
-            block=block, ssl_context=self.ssl_context)
-
-
-def get_legacy_session():
-    ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
-    ctx.options |= 0x4  # OP_LEGACY_SERVER_CONNECT
-    session = requests.session()
-    session.mount('https://', CustomHttpAdapter(ctx))
-    return session
-# *****
-
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s - %(name)s - %(levelname)s - %(process)s - %(thread)s] %(message)s')
 
+
+# *****
+python_version = sys.version_info
+if python_version >= (3, 9):
+    import urllib3
+    import ssl
+    class CustomHttpAdapter (requests.adapters.HTTPAdapter):
+        # "Transport adapter" that allows us to use custom ssl_context.
+        def __init__(self, ssl_context=None, **kwargs):
+            self.ssl_context = ssl_context
+            super().__init__(**kwargs)
+
+        def init_poolmanager(self, connections, maxsize, block=False):
+            self.poolmanager = urllib3.poolmanager.PoolManager(
+                num_pools=connections, maxsize=maxsize,
+                block=block, ssl_context=self.ssl_context)
+
+
+    def get_legacy_session():
+        ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+        ctx.options |= 0x4  # OP_LEGACY_SERVER_CONNECT
+        session = requests.session()
+        session.mount('https://', CustomHttpAdapter(ctx))
+        return session
+# *****
 
 class Client(object):
     def __init__(self, configs):
@@ -125,9 +127,9 @@ class Client(object):
         # self.logger = log.get_logger('logs', name='client') logging not support multiprocess
 
         # Use to recognize the Verification Code (http://www.chaojiying.com/).
-        self.cjy_usrname = '###'
-        self.cjy_password = '###'
-        self.cjy_soft_id = '###'
+        self.cjy_usrname = 'xxx'
+        self.cjy_password = 'xxx'
+        self.cjy_soft_id = 'xxx'
         self.Chaojiying_Client = Chaojiying_Client(self.cjy_usrname, self.cjy_password, self.cjy_soft_id)
 
         # Preseted time order
@@ -185,11 +187,13 @@ class Client(object):
         }
         try:
             logging.info('获取ID中...')
-            # python 3.10及以上使用
-            # s = get_legacy_session()
-            # resource_resp = s.get(resource_url, headers=headers)
-            # python 3.10 以下使用
-            resource_resp = requests.get(resource_url, headers=headers)
+            # python 3.9及以上使用
+            if python_version >= (3, 9):
+                s = get_legacy_session()
+                resource_resp = s.get(resource_url, headers=headers)
+            # python 3.9 以下使用
+            else:
+                resource_resp = requests.get(resource_url, headers=headers) 
             html_resource = resource_resp.text
             # print(html_resource)
             soup = BeautifulSoup(html_resource,'html.parser')
@@ -240,6 +244,14 @@ class Client(object):
     def click_captcha(self, browser, valid_text, captcha_dic):
         captcha_element = browser.find_element(By.CLASS_NAME, 'valid_bg-img')
 
+        from packaging.version import Version
+        import selenium
+
+        selenium_version = Version(selenium.__version__)
+        if selenium_version >= Version("4.2"):
+            captcha_half_width = float(captcha_element.rect['width'])/2
+            captcha_half_height = float(captcha_element.rect['height'])/2
+
         def replace_similar_chars(s, d):
             for char in s:
                 matches = sum(1 for k in d if k == char)
@@ -254,9 +266,12 @@ class Client(object):
             replace_similar_chars(valid_text, captcha_dic)
 
         if valid_text and captcha_dic:
-            for _, valid_word in enumerate(valid_text):
+            for i, valid_word in enumerate(valid_text):
                 left = captcha_dic.get(valid_word, {}).get('left', 50)  # - 10
                 top = captcha_dic.get(valid_word, {}).get('top', 50)  # - 20
+                if selenium_version >= Version("4.2"):
+                    left = left - captcha_half_width
+                    top = top - captcha_half_height
                 actions = ActionChains(browser)
                 actions.move_to_element_with_offset(captcha_element, left, top).click().perform()
                 time.sleep(0.5)
@@ -280,7 +295,8 @@ class Client(object):
         time.sleep(5)
 
         try:
-            verify_button = browser.find_element_by_css_selector('#verify_button1')
+            # verify_button = browser.find_element_by_css_selector('#verify_button1')
+            verify_button = browser.find_element(By.ID, 'verify_button1')
             verify_button.click() #
             time.sleep(1)
         except Exception as e:
@@ -294,7 +310,7 @@ class Client(object):
         # # Test
         # valid_text = "农务民息"
         # captcha_dic = {'务': {'left': 285, 'top': 129}, '息': {'left': 197, 'top': 127},
-        #                '民': {'left': 121, 'top': 102}, '农': {'left': 56, 'top': 81}}
+                       # '民': {'left': 121, 'top': 102}, '农': {'left': 56, 'top': 81}}
         self.click_captcha(browser, valid_text, captcha_dic)
 
         max_tries = 3
@@ -324,7 +340,8 @@ class Client(object):
                 time.sleep(1)
 
         try:
-            element = browser.find_element_by_id('btn_sub')
+            # element = browser.find_element_by_id('btn_sub')
+            element = browser.find_element(By.ID, 'btn_sub')
             browser.execute_script("arguments[0].click();", element)
         except Exception as e:
             print("=======")
@@ -340,11 +357,13 @@ class Client(object):
             'user-agent': self.user_agent,
             'Connection': 'close',
         }
-        # python 3.10及以上使用
-        # s = get_legacy_session()
-        # resource_resp = s.get(status_url, headers=headers)
-        # python 3.10 以下使用
-        resource_resp = requests.get(status_url, headers=headers)
+        # python 3.9及以上使用
+        if python_version >= (3, 9):
+            s = get_legacy_session()
+            resource_resp = s.get(status_url, headers=headers)
+        # python 3.9 以下使用
+        else:
+            resource_resp = requests.get(status_url, headers=headers)
         html_resource = resource_resp.text
         soup = BeautifulSoup(html_resource,'html.parser')
         try:
