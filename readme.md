@@ -28,10 +28,12 @@ FudanCourtReservation 是一个用于自动预约复旦体育场馆（如羽毛�
 ## 使用方法
 
 1. 配置账号信息：
-    修改 `config.json` 文件，填写你的ehall登录信息和预约选项。
-    修改 `client.py` 中接码平台的信息
 
-2. 运行脚本：(切勿直接运行，理解代码逻辑并修改之后再运行)
+   修改 `config.json` 文件，填写你的ehall登录信息和预约选项。
+   
+   修改 `client.py` 中接码平台的信息
+
+3. 运行脚本：(切勿直接运行，理解代码逻辑并修改之后再运行)
    
     ```sh
     python main.py
@@ -67,10 +69,13 @@ https://googlechromelabs.github.io/chrome-for-testing/#stable
 该项目更新后可以重新正常运行，已测试通过，但采用的是selenium模拟浏览器操作，高峰期bug会增多，慎用，且文字识别错误率有点高，进行了手动调整和增加了retry次数修改。
 
 2024年9月1日 更新说明：
+
 原始代码使用的环境是 python 3.7.6 + selenium 4.1.3
+
 更新后在 python 3.11.9 + selenium 4.31.1 也可测试通过
 
 例子：
+```
 [2024-09-01 12:51:46,287 - root - INFO - 27484 - 17700] 成功填充账号和密码！！！
 [2024-09-01 12:51:57,654 - root - INFO - 27484 - 17700] 成功获取cookie！！！
 [2024-09-01 12:51:57,654 - root - INFO - 27484 - 17700] NSC_Xfc-DpoufouTxjudi-443=xxx; JSESSIONID=xxx; iPlanetDirectoryPro=xxx;
@@ -107,6 +112,7 @@ Verification passed!
 [2024-09-01 12:52:39,685 - root - INFO - 27484 - 17700] 江湾体育馆排球场1号-2024-09-03 12:00 可约, ID为8aecc6ce8f7d1a2501902999fe1d1ce6
 [2024-09-01 12:52:39,686 - root - INFO - 27484 - 17700] 江湾体育馆排球场1号-2024-09-03 13:00 可约, ID为8aecc6ce8f7d1a2501902999fe1e1ce8
 [2024-09-01 12:52:39,687 - root - INFO - 27484 - 17700] 已经预定 江湾体育馆排球场1号-2024-09-03 09:00
+```
 
 ## 许可证
 
